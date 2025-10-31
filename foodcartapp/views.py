@@ -1,9 +1,14 @@
+import json
 from django.http import JsonResponse
 from django.templatetags.static import static
+from django.views.decorators.csrf import csrf_exempt
+from django.db import transaction
 
+from .models import Product, Order, OrderItem
 
-from .models import Product
-
+from phonenumber_field.phonenumber import to_python
+from phonenumber_field.validators import validate_international_phonenumber
+from django.core.exceptions import ValidationError
 
 def banners_list_api(request):
     # FIXME move data to db?
@@ -56,7 +61,54 @@ def product_list_api(request):
         'indent': 4,
     })
 
+@csrf_exempt
 
 def register_order(request):
-    # TODO это лишь заглушка
-    return JsonResponse({})
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    data = json.loads(request.body)
+
+    products = data.get('products')
+    if not products:
+        return JsonResponse({'error': 'Empty products'}, status=400)
+
+    firstname = data.get('firstname', '').strip()
+    lastname = data.get('lastname', '').strip()
+    phonenumber = data.get('phonenumber', '').strip()
+    address = data.get('address', '').strip()
+
+    if not (firstname and phonenumber and address):
+        return JsonResponse({'error': 'Не заполнены обязательные поля'}, status=400)
+
+    # Валидация номера телефона
+    try:
+        phonenumber_obj = to_python(phonenumber)
+        validate_international_phonenumber(phonenumber_obj)
+    except ValidationError:
+        return JsonResponse({'error': 'Номер телефона некорректный'}, status=400)
+
+    with transaction.atomic():
+        order = Order.objects.create(
+            firstname=firstname,
+            lastname=lastname,
+            phonenumber=phonenumber,
+            address=address
+        )
+        order_items = []
+        for product_data in products:
+            try:
+                product = Product.objects.get(pk=product_data['product'])
+            except Product.DoesNotExist:
+                transaction.set_rollback(True)
+                return JsonResponse({'error': f'Product not found: {product_data["product"]}'}, status=400)
+            quantity = product_data.get('quantity', 1)
+            item = OrderItem(
+                order=order,
+                product=product,
+                quantity=quantity
+            )
+            order_items.append(item)
+        OrderItem.objects.bulk_create(order_items)
+
+    return JsonResponse({'status': 'ok', 'order_id': order.id})
