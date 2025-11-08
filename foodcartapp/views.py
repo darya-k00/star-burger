@@ -9,7 +9,9 @@ from .models import Product, Order, OrderItem
 from phonenumber_field.phonenumber import to_python
 from phonenumber_field.validators import validate_international_phonenumber
 from django.core.exceptions import ValidationError
+from rest_framework.decorators import api_view
 
+@api_view(['GET'])
 def banners_list_api(request):
     # FIXME move data to db?
     return JsonResponse([
