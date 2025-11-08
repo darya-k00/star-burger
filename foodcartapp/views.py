@@ -11,7 +11,7 @@ from phonenumber_field.validators import validate_international_phonenumber
 from django.core.exceptions import ValidationError
 from rest_framework.decorators import api_view
 
-@api_view(['GET'])
+
 def banners_list_api(request):
     # FIXME move data to db?
     return JsonResponse([
@@ -63,8 +63,8 @@ def product_list_api(request):
         'indent': 4,
     })
 
-@csrf_exempt
 
+@api_view(['POST'])
 def register_order(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
