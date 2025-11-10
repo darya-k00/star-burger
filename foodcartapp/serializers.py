@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import transaction
 from .models import Order, OrderItem, Product
 
 
@@ -57,8 +58,9 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Список продуктов не может быть пустым")
         return value
 
+
+    @transaction.atomic    
     def create(self, validated_data):
-        """Создаем заказ и товары в заказе"""
         products_data = validated_data.pop('items')
         order = Order.objects.create(**validated_data)
 

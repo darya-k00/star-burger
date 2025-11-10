@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from phonenumber_field.modelfields import PhoneNumberField
+from django.core.exceptions import ValidationError
 
 
 class Restaurant(models.Model):
@@ -124,11 +125,55 @@ class RestaurantMenuItem(models.Model):
         return f"{self.restaurant.name} - {self.product.name}"
 
 class Order(models.Model):
-    firstname = models.CharField('Имя', max_length=50)
-    lastname = models.CharField('Фамилия', max_length=50, blank=True)
-    phonenumber = PhoneNumberField('Телефон', db_index=True)
-    address = models.CharField('Адрес', max_length=200)
-    created_at = models.DateTimeField('Время создания', auto_now_add=True, db_index=True)
+    STATUS_CHOICES = [
+        ('new', 'Новый'),
+        ('processing', 'В обработке'),
+        ('completed', 'Завершен'),
+        ('canceled', 'Отменен'),
+    ]
+
+    firstname = models.CharField(
+        'имя',
+        max_length=50
+    )
+    lastname = models.CharField(
+        'фамилия',
+        max_length=50
+    )
+    phonenumber = PhoneNumberField(
+        'телефон',
+        db_index=True
+    )
+    address = models.CharField(
+        'адрес',
+        max_length=200
+    )
+    status = models.CharField(
+        'статус',
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='new',
+        db_index=True
+    )
+    created_at = models.DateTimeField(
+        'создан',
+        auto_now_add=True,
+        db_index=True
+    )
+    called_at = models.DateTimeField(
+        'позвонили',
+        blank=True,
+        null=True
+    )
+    delivered_at = models.DateTimeField(
+        'доставлен',
+        blank=True,
+        null=True
+    )
+    comment = models.TextField(
+        'комментарий',
+        blank=True
+    )
 
     class Meta:
         verbose_name = 'заказ'
@@ -136,17 +181,41 @@ class Order(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Заказ {self.firstname} {self.lastname} ({self.phonenumber})"
+        return f"Заказ #{self.id} - {self.firstname} {self.lastname}"
 
 
 class OrderItem(models.Model):
-    order = models.ForeignKey(Order, verbose_name='заказ', related_name='items', on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, verbose_name='товар', related_name='order_items', on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField('количество', default=1, validators=[MinValueValidator(1)])
+    order = models.ForeignKey(
+        Order,
+        related_name='items',
+        verbose_name='заказ',
+        on_delete=models.CASCADE
+    )
+    product = models.ForeignKey(
+        Product,
+        verbose_name='товар',
+        on_delete=models.CASCADE
+    )
+    quantity = models.PositiveIntegerField(
+        'количество',
+        validators=[MinValueValidator(1)]
+    )
+    price = models.DecimalField(
+        'цена',
+        max_digits=8,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+        default=0
+    )
 
     class Meta:
         verbose_name = 'позиция заказа'
         verbose_name_plural = 'позиции заказа'
 
     def __str__(self):
-        return f"{self.product.name} x {self.quantity}"
+        return f"{self.product.name} x{self.quantity}"
+
+    def clean(self):
+        """Валидация на уровне модели"""
+        if self.price < 0:
+            raise ValidationError({'price': 'Цена не может быть отрицательной'})

@@ -13,7 +13,6 @@ from rest_framework.decorators import api_view
 
 
 def banners_list_api(request):
-    # FIXME move data to db?
     return JsonResponse([
         {
             'title': 'Burger',
@@ -79,9 +78,7 @@ def register_order(request):
     elif request.method == 'POST':
         print(" [API] Запрос регистрации заказа")
 
-    import json
-        print("📦 ЗАКАЗ (JSON):")
-        print(json.dumps(request.data, ensure_ascii=False, indent=2))
+        import json
         serializer = OrderSerializer(data=request.data)
         if serializer.is_valid():
             order = serializer.save()
