@@ -2,6 +2,9 @@ from django.contrib import admin
 from django.shortcuts import reverse
 from django.templatetags.static import static
 from django.utils.html import format_html
+from django.core.exceptions import ValidationError
+from django.http import HttpResponseRedirect
+from django.utils.http import url_has_allowed_host_and_scheme
 
 
 from .models import (
@@ -52,8 +55,6 @@ class ProductAdmin(admin.ModelAdmin):
         'category',
     ]
     search_fields = [
-        # FIXME SQLite can not convert letter case for cyrillic words properly, so search will be buggy.
-        # Migration to PostgreSQL is necessary
         'name',
         'category__name',
     ]
@@ -117,7 +118,27 @@ class OrderAdmin(admin.ModelAdmin):
     search_fields = ['firstname', 'lastname', 'phonenumber', 'address']
     inlines = [OrderItemInline]
 
-@admin.register(OrderItem)
-class OrderItemAdmin(admin.ModelAdmin):
-    list_display = ['order', 'product', 'quantity']
-    search_fields = ['order__firstname', 'order__lastname', 'product__name']
+    def response_change(self, request, obj):
+        if '_continue' not in request.POST:
+            next_url = request.GET.get('next')
+            if next_url and url_has_allowed_host_and_scheme(
+                url=next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                return HttpResponseRedirect(next_url)
+        return super().response_change(request, obj)
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for instance in instances:
+
+            if not instance.price or instance.price == 0:
+                instance.price = instance.product.price
+
+            if instance.price < 0:
+                from django.core.exceptions import ValidationError
+                raise ValidationError('Цена должна быть положительной')
+            instance.save()
+        formset.save_m2m()
+
