@@ -5,6 +5,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
 from rest_framework.response import Response
 from rest_framework import status
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
 from .models import Product, Order, OrderItem, Restaurant
 from .serializers import OrderSerializer
@@ -63,6 +65,7 @@ def product_list_api(request):
     })
 
 
+@csrf_exempt
 @api_view(['GET', 'POST'])
 def register_order(request):
     if request.method == 'GET':

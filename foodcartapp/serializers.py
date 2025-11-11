@@ -17,7 +17,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
         return value
 
     def validate_quantity(self, value):
-        """Проверяем количество"""
         if value < 1:
             raise serializers.ValidationError("Количество должно быть положительным")
         if value > 100:
@@ -53,7 +52,6 @@ class OrderSerializer(serializers.ModelSerializer):
         return value.strip()
 
     def validate_products(self, value):
-        """Проверяем список продуктов"""
         if not value:
             raise serializers.ValidationError("Список продуктов не может быть пустым")
         return value

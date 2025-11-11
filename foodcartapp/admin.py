@@ -114,9 +114,30 @@ class ProductCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ['firstname', 'lastname', 'phonenumber', 'address', 'created_at']
-    search_fields = ['firstname', 'lastname', 'phonenumber', 'address']
+    list_display = ['firstname', 'lastname', 'phonenumber', 'address', 'created_at', 'delivered_at']
+    search_fields = ['firstname', 'lastname', 'phonenumber', 'address', 'delivered_at']
     inlines = [OrderItemInline]
+    fieldsets = (
+        ('Информация о клиенте', {
+            'fields': [
+                'firstname', 'lastname', 'phonenumber', 'address'
+            ]
+        }),
+        ('Статус и даты', {
+            'fields': [
+                'status', 'created_at', 'called_at', 'delivered_at'
+            ]
+        }),
+        ('Комментарии', {
+            'fields': [
+                'comment',
+                'manager_comment',
+            ],
+            'classes': ['wide']
+        }),
+    )
+
+    readonly_fields = ['created_at']
 
     def response_change(self, request, obj):
         if '_continue' not in request.POST:
