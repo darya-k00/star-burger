@@ -175,6 +175,11 @@ class Order(models.Model):
         blank=True
     )
 
+    manager_comment = models.TextField(
+        'комментарий менеджера',
+        blank=True
+    )
+
     class Meta:
         verbose_name = 'заказ'
         verbose_name_plural = 'заказы'
@@ -216,6 +221,5 @@ class OrderItem(models.Model):
         return f"{self.product.name} x{self.quantity}"
 
     def clean(self):
-        """Валидация на уровне модели"""
         if self.price < 0:
             raise ValidationError({'price': 'Цена не может быть отрицательной'})
