@@ -2,7 +2,8 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from phonenumber_field.modelfields import PhoneNumberField
 from django.core.exceptions import ValidationError
-
+from django.utils import timezone
+from geopy.distance import distance
 
 class Restaurant(models.Model):
     name = models.CharField(
@@ -26,6 +27,16 @@ class Restaurant(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_coordinates(self):
+        from locations.models import Location
+        try:
+            location = Location.objects.get(address=self.address)
+            if location.latitude and location.longitude:
+                return (location.latitude, location.longitude)
+        except Location.DoesNotExist:
+            pass
+        return None
 
 
 class ProductQuerySet(models.QuerySet):
@@ -132,6 +143,12 @@ class Order(models.Model):
         ('canceled', 'Отменен'),
     ]
 
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Наличными'),
+        ('electronic', 'Электронно'),
+    ]
+
+
     firstname = models.CharField(
         'имя',
         max_length=50
@@ -154,6 +171,21 @@ class Order(models.Model):
         choices=STATUS_CHOICES,
         default='new',
         db_index=True
+    )
+    payment_method = models.CharField(
+        'способ оплаты',
+        max_length=20,
+        choices=PAYMENT_METHOD_CHOICES,
+        default='cash',
+        db_index=True
+    )
+    cooking_restaurant = models.ForeignKey(
+        Restaurant,
+        verbose_name='Ресторан для приготовления',
+        related_name='orders',
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL
     )
     created_at = models.DateTimeField(
         'создан',
@@ -188,6 +220,56 @@ class Order(models.Model):
     def __str__(self):
         return f"Заказ #{self.id} - {self.firstname} {self.lastname}"
 
+    def get_coordinates(self):
+        from locations.models import Location
+        try:
+            location = Location.objects.get(address=self.address)
+            if location.latitude and location.longitude:
+                return (location.latitude, location.longitude)
+        except Location.DoesNotExist:
+            pass
+        return None
+
+    def calculate_distance_to_restaurant(self, restaurant):
+        order_coords = self.get_coordinates()
+        restaurant_coords = restaurant.get_coordinates()
+
+        if not order_coords or not restaurant_coords:
+            return None
+
+        try:
+            return distance(order_coords, restaurant_coords).km
+        except Exception:
+            return None
+
+    def get_available_restaurants(self):
+        from django.db.models import Count
+
+        order_products = self.items.values_list('product', flat=True)
+
+        if not order_products:
+            return []
+
+        available_restaurants = Restaurant.objects.filter(
+            menu_items__product__in=order_products,
+            menu_items__availability=True
+        ).annotate(
+            matching_products=Count('menu_items__product', distinct=True)
+        ).filter(
+            matching_products=len(order_products)
+        ).distinct()
+
+        restaurants_with_distance = []
+        for restaurant in available_restaurants:
+            dist = self.calculate_distance_to_restaurant(restaurant)
+            restaurants_with_distance.append({
+                'restaurant': restaurant,
+                'distance': dist
+            })
+
+        restaurants_with_distance.sort(key=lambda x: (x['distance'] is None, x['distance']))
+
+        return restaurants_with_distance
 
 class OrderItem(models.Model):
     order = models.ForeignKey(

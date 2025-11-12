@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth import authenticate, login
 from django.contrib.auth import views as auth_views
 from foodcartapp.models import Order, OrderItem
+from locations.utils import get_or_create_location, batch_update_locations
 
 
 
@@ -62,7 +63,7 @@ class LogoutView(auth_views.LogoutView):
 
 
 def is_manager(user):
-    return user.is_staff  # FIXME replace with specific permission
+    return user.is_staff  
 
 
 @user_passes_test(is_manager, login_url='restaurateur:login')
@@ -94,7 +95,22 @@ def view_restaurants(request):
 
 @user_passes_test(is_manager, login_url='restaurateur:login')
 def view_orders(request):
-    orders = Order.objects.filter(status='new').prefetch_related('items__product')
+    orders = Order.objects.exclude(
+        status__in=['completed', 'canceled']
+    ).prefetch_related(
+        Prefetch(
+            'items',
+            queryset=OrderItem.objects.select_related('product')
+        )
+    ).order_by('-created_at')
+
+    order_addresses = set(orders.values_list('address', flat=True))
+    restaurant_addresses = set(Restaurant.objects.values_list('address', flat=True))
+    all_addresses = order_addresses.union(restaurant_addresses)
+    try:
+        batch_update_locations(all_addresses)
+    except Exception as e:    
+        print(f"Ошибка геокодирования: {e}")
 
     orders_data = []
     for order in orders:
@@ -105,10 +121,18 @@ def view_orders(request):
             'phonenumber': order.phonenumber,
             'address': order.address,
             'status': order.get_status_display(),
+            'payment_method': order.get_payment_method_display(),
             'comment': order.comment or '-',
+            'manager_comment': order.manager_comment or '-',
+            'created_at': order.created_at,
+            'called_at': order.called_at,
+            'delivered_at': order.delivered_at,
             'products': [],
-            'total_amount': 0
+            'total_amount': 0,
+            'cooking_restaurant': order.cooking_restaurant,
+            'available_restaurants': order.get_available_restaurants() if not order.cooking_restaurant else []
         }
+
 
         for item in order.items.all():
             product_info = f"{item.product.name} x{item.quantity}"
