@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'debug_toolbar',
+    'phonenumber_field',
     'rest_framework',
 ]
 
@@ -125,4 +126,4 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "bundles"),
 ]
 
-YANDEX_GEOCODER_APIKEY = ('0b77519b-66c0-4aa9-923e-827e4512b95e')
+YANDEX_GEOCODER_APIKEY = env('YANDEX_GEOCODER_APIKEY')

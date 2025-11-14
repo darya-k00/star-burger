@@ -23,6 +23,14 @@
       color: #dc3545;
       font-weight: bold;
     }
+    .text-danger {
+      color: #dc3545;
+      font-weight: bold;
+      padding: 5px;
+      background-color: #f8d7da;
+      border: 1px solid #f5c6cb;
+      border-radius: 4px;
+    }
   </style>
 
   <div class="container">
@@ -69,6 +77,11 @@
             <div class="selected-restaurant">
               ✅ {{ order.cooking_restaurant.name }}
             </div>
+          {% else %}
+            {% if not order.is_address_found %}
+              <div class="text-danger">
+                 Адрес не найден
+              </div>
           {% else %}
             {% if order.available_restaurants %}
               <div class="restaurant-info">

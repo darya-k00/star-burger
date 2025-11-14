@@ -114,8 +114,8 @@ class ProductCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ['firstname', 'lastname', 'phonenumber', 'address', 'created_at', 'delivered_at']
-    search_fields = ['firstname', 'lastname', 'phonenumber', 'address', 'delivered_at']
+    list_display = ['firstname', 'lastname', 'phonenumber', 'address', 'created_at', 'delivered_at', 'payment_method']
+    search_fields = ['firstname', 'lastname', 'phonenumber', 'address', 'delivered_at', 'payment_method']
     inlines = [OrderItemInline]
     fieldsets = (
         ('Информация о клиенте', {
@@ -123,9 +123,14 @@ class OrderAdmin(admin.ModelAdmin):
                 'firstname', 'lastname', 'phonenumber', 'address'
             ]
         }),
-        ('Статус и даты', {
+        ('Ресторан ', {
             'fields': [
-                'status', 'created_at', 'called_at', 'delivered_at'
+                'cooking_restaurant',
+            ]
+        }),
+        ('Статус и оплата', {
+            'fields': [
+                'status', 'payment_method', 'created_at', 'called_at', 'delivered_at'
             ]
         }),
         ('Комментарии', {

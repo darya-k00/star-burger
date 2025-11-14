@@ -4,6 +4,7 @@ from phonenumber_field.modelfields import PhoneNumberField
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from geopy.distance import distance
+from django.db.models import F, Sum, ExpressionWrapper, DecimalField
 
 class Restaurant(models.Model):
     name = models.CharField(
@@ -135,6 +136,52 @@ class RestaurantMenuItem(models.Model):
     def __str__(self):
         return f"{self.restaurant.name} - {self.product.name}"
 
+class OrderItem(models.Model):
+    order = models.ForeignKey(
+        'Order',
+        related_name='items',
+        verbose_name='заказ',
+        on_delete=models.CASCADE
+    )
+    product = models.ForeignKey(
+        Product,
+        related_name='menu_products',
+        verbose_name='товар',
+        on_delete=models.CASCADE
+    )
+    quantity = models.PositiveIntegerField(
+        'количество',
+        validators=[MinValueValidator(1)]
+    )
+    price = models.DecimalField(
+        'цена',
+        max_digits=8,
+        decimal_places=2,
+        validators=[MinValueValidator(0)]
+    )
+
+    class Meta:
+        verbose_name = 'позиция заказа'
+        verbose_name_plural = 'позиции заказа'
+
+    def __str__(self):
+        return f"{self.product.name} x{self.quantity}"
+
+    def clean(self):
+        if self.price < 0:
+            raise ValidationError({'price': 'Цена не может быть отрицательной'})
+
+class OrderQuerySet(models.QuerySet):
+    def with_total_cost(self):
+        return self.annotate(
+            total_cost=Sum(
+                ExpressionWrapper(
+                    F('items__price') * F('items__quantity'),
+                    output_field=DecimalField(max_digits=10, decimal_places=2)
+                )
+            )
+        )
+
 class Order(models.Model):
     STATUS_CHOICES = [
         ('new', 'Новый'),
@@ -176,7 +223,6 @@ class Order(models.Model):
         'способ оплаты',
         max_length=20,
         choices=PAYMENT_METHOD_CHOICES,
-        default='cash',
         db_index=True
     )
     cooking_restaurant = models.ForeignKey(
@@ -195,12 +241,14 @@ class Order(models.Model):
     called_at = models.DateTimeField(
         'позвонили',
         blank=True,
-        null=True
+        null=True,
+        db_index=True
     )
     delivered_at = models.DateTimeField(
         'доставлен',
         blank=True,
-        null=True
+        null=True,
+        db_index=True
     )
     comment = models.TextField(
         'комментарий',
@@ -211,6 +259,7 @@ class Order(models.Model):
         'комментарий менеджера',
         blank=True
     )
+    objects = OrderQuerySet.as_manager()
 
     class Meta:
         verbose_name = 'заказ'
@@ -219,6 +268,9 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Заказ #{self.id} - {self.firstname} {self.lastname}"
+
+    def is_address_found(self):
+        return self.get_coordinates() is not None
 
     def get_coordinates(self):
         from locations.models import Location
@@ -229,79 +281,3 @@ class Order(models.Model):
         except Location.DoesNotExist:
             pass
         return None
-
-    def calculate_distance_to_restaurant(self, restaurant):
-        order_coords = self.get_coordinates()
-        restaurant_coords = restaurant.get_coordinates()
-
-        if not order_coords or not restaurant_coords:
-            return None
-
-        try:
-            return distance(order_coords, restaurant_coords).km
-        except Exception:
-            return None
-
-    def get_available_restaurants(self):
-        from django.db.models import Count
-
-        order_products = self.items.values_list('product', flat=True)
-
-        if not order_products:
-            return []
-
-        available_restaurants = Restaurant.objects.filter(
-            menu_items__product__in=order_products,
-            menu_items__availability=True
-        ).annotate(
-            matching_products=Count('menu_items__product', distinct=True)
-        ).filter(
-            matching_products=len(order_products)
-        ).distinct()
-
-        restaurants_with_distance = []
-        for restaurant in available_restaurants:
-            dist = self.calculate_distance_to_restaurant(restaurant)
-            restaurants_with_distance.append({
-                'restaurant': restaurant,
-                'distance': dist
-            })
-
-        restaurants_with_distance.sort(key=lambda x: (x['distance'] is None, x['distance']))
-
-        return restaurants_with_distance
-
-class OrderItem(models.Model):
-    order = models.ForeignKey(
-        Order,
-        related_name='items',
-        verbose_name='заказ',
-        on_delete=models.CASCADE
-    )
-    product = models.ForeignKey(
-        Product,
-        verbose_name='товар',
-        on_delete=models.CASCADE
-    )
-    quantity = models.PositiveIntegerField(
-        'количество',
-        validators=[MinValueValidator(1)]
-    )
-    price = models.DecimalField(
-        'цена',
-        max_digits=8,
-        decimal_places=2,
-        validators=[MinValueValidator(0)],
-        default=0
-    )
-
-    class Meta:
-        verbose_name = 'позиция заказа'
-        verbose_name_plural = 'позиции заказа'
-
-    def __str__(self):
-        return f"{self.product.name} x{self.quantity}"
-
-    def clean(self):
-        if self.price < 0:
-            raise ValidationError({'price': 'Цена не может быть отрицательной'})

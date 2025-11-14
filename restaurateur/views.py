@@ -6,12 +6,11 @@ from django.contrib.auth.decorators import user_passes_test
 
 from django.contrib.auth import authenticate, login
 from django.contrib.auth import views as auth_views
-from foodcartapp.models import Order, OrderItem
+from django.db.models import Prefetch, Count
+from foodcartapp.models import Order, OrderItem, Product, Restaurant
 from locations.utils import get_or_create_location, batch_update_locations
-
-
-
-from foodcartapp.models import Product, Restaurant
+from locations.geocoder import fetch_coordinates
+from django.conf import settings
 
 
 class Login(forms.Form):
@@ -92,28 +91,89 @@ def view_restaurants(request):
         'restaurants': Restaurant.objects.all(),
     })
 
+def get_addresses_coordinates(addresses):
+
+    coordinates_dict = {}
+
+    existing_locations = Location.objects.filter(address__in=addresses)
+    for location in existing_locations:
+        if location.latitude and location.longitude:
+            coordinates_dict[location.address] = (location.latitude, location.longitude)
+
+    for address in addresses:
+        if address not in coordinates_dict:
+            location = get_or_create_location(address)
+            if location and location.latitude and location.longitude:
+                coordinates_dict[address] = (location.latitude, location.longitude)
+            else:
+                coordinates_dict[address] = None
+
+    return coordinates_dict
+
+
+def calculate_distance(coord1, coord2):
+    if not coord1 or not coord2:
+        return None
+
+    try:
+        return distance(coord1, coord2).km
+    except Exception:
+        return None
 
 @user_passes_test(is_manager, login_url='restaurateur:login')
 def view_orders(request):
     orders = Order.objects.exclude(
         status__in=['completed', 'canceled']
-    ).prefetch_related(
+    ).select_related(
         Prefetch(
             'items',
             queryset=OrderItem.objects.select_related('product')
         )
-    ).order_by('-created_at')
+    ).with_total_cost().order_by('-created_at')
 
     order_addresses = set(orders.values_list('address', flat=True))
     restaurant_addresses = set(Restaurant.objects.values_list('address', flat=True))
     all_addresses = order_addresses.union(restaurant_addresses)
-    try:
-        batch_update_locations(all_addresses)
-    except Exception as e:    
-        print(f"Ошибка геокодирования: {e}")
+    coordinates_dict = get_addresses_coordinates(all_addresses)
+
+    all_restaurants = Restaurant.objects.prefetch_related(
+        Prefetch('menu_items',
+                 queryset=RestaurantMenuItem.objects.filter(availability=True)
+                 .select_related('product'))
+    )
+
+    restaurant_products = defaultdict(set)
+    for restaurant in all_restaurants:
+        for menu_item in restaurant.menu_items.all():
+            restaurant_products[restaurant.id].add(menu_item.product.id)
+
+    restaurants_dict = {r.id: r for r in all_restaurants}
 
     orders_data = []
     for order in orders:
+
+        order_product_ids = {item.product.id for item in order.items.all()}
+
+        available_restaurants = []
+        if not order.cooking_restaurant and order_product_ids:
+            for restaurant_id, available_products in restaurant_products.items():
+                if order_product_ids.issubset(available_products):
+                    restaurant = restaurants_dict[restaurant_id]
+                    available_restaurants.append(restaurant)
+
+        available_restaurants_with_distances = []
+        for restaurant in available_restaurants:
+            distance = calculate_distance(
+                coordinates_dict.get(order.address),
+                coordinates_dict.get(restaurant.address)
+            )
+            available_restaurants_with_distances.append({
+                'restaurant': restaurant,
+                'distance': distance
+            })
+
+        available_restaurants_with_distances.sort(key=lambda x: (x['distance'] is None, x['distance']))
+
         order_info = {
             'id': order.id,
             'firstname': order.firstname,
@@ -128,16 +188,16 @@ def view_orders(request):
             'called_at': order.called_at,
             'delivered_at': order.delivered_at,
             'products': [],
-            'total_amount': 0,
+            'total_amount': order.total_cost or  0,
             'cooking_restaurant': order.cooking_restaurant,
-            'available_restaurants': order.get_available_restaurants() if not order.cooking_restaurant else []
+            'available_restaurants': available_restaurants_with_distances,
+            'is_address_found': coordinates_dict.get(order.address) is not None
         }
 
 
         for item in order.items.all():
             product_info = f"{item.product.name} x{item.quantity}"
             order_info['products'].append(product_info)
-            order_info['total_amount'] += item.price * item.quantity
 
         orders_data.append(order_info)
         
