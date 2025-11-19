@@ -7,10 +7,10 @@ from django.http import HttpResponseRedirect
 from django.utils.http import url_has_allowed_host_and_scheme
 
 
-from .models import (
-    Product, ProductCategory, Restaurant, RestaurantMenuItem,
-    Order, OrderItem,
-)
+from .models import Product, Order, OrderItem
+from .models import ProductCategory
+from .models import Restaurant
+from .models import RestaurantMenuItem
 
 
 class RestaurantMenuItemInline(admin.TabularInline):

@@ -4,13 +4,16 @@ from django.views import View
 from django.urls import reverse_lazy
 from django.contrib.auth.decorators import user_passes_test
 
+from django.db.models import Prefetch
 from django.contrib.auth import authenticate, login
 from django.contrib.auth import views as auth_views
-from django.db.models import Prefetch, Count
-from foodcartapp.models import Order, OrderItem, Product, Restaurant
+from foodcartapp.models import Order, OrderItem, Product, Restaurant, \
+    RestaurantMenuItem
 from locations.utils import get_or_create_location, batch_update_locations
-from locations.geocoder import fetch_coordinates
-from django.conf import settings
+from collections import defaultdict
+from geopy.distance import distance
+from locations.models import Location
+from locations.utils import get_or_create_location
 
 
 class Login(forms.Form):
@@ -124,11 +127,8 @@ def calculate_distance(coord1, coord2):
 def view_orders(request):
     orders = Order.objects.exclude(
         status__in=['completed', 'canceled']
-    ).select_related(
-        Prefetch(
-            'items',
-            queryset=OrderItem.objects.select_related('product')
-        )
+    ).select_related('cooking_restaurant').prefetch_related(
+        Prefetch('items', queryset=OrderItem.objects.select_related('product'))
     ).with_total_cost().order_by('-created_at')
 
     order_addresses = set(orders.values_list('address', flat=True))

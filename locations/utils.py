@@ -5,6 +5,7 @@ from django.utils import timezone
 
 
 def get_or_create_location(address):
+    """Получает или создает Location для адреса"""
     if not address:
         return None
 
@@ -15,7 +16,7 @@ def get_or_create_location(address):
         defaults={}
     )
 
-    if created:
+    if created or location.needs_geocoding():
         try:
             coords = fetch_coordinates(settings.YANDEX_GEOCODER_APIKEY, normalized_address)
             if coords:
@@ -29,6 +30,7 @@ def get_or_create_location(address):
 
 
 def batch_update_locations(addresses):
+    """Пакетное обновление координат для списка адресов"""
     locations = []
     for address in addresses:
         if address:

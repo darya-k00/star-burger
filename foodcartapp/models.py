@@ -167,10 +167,6 @@ class OrderItem(models.Model):
     def __str__(self):
         return f"{self.product.name} x{self.quantity}"
 
-    def clean(self):
-        if self.price < 0:
-            raise ValidationError({'price': 'Цена не может быть отрицательной'})
-
 class OrderQuerySet(models.QuerySet):
     def with_total_cost(self):
         return self.annotate(
