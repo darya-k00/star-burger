@@ -29,16 +29,6 @@ class Restaurant(models.Model):
     def __str__(self):
         return self.name
 
-    def get_coordinates(self):
-        from locations.models import Location
-        try:
-            location = Location.objects.get(address=self.address)
-            if location.latitude and location.longitude:
-                return (location.latitude, location.longitude)
-        except Location.DoesNotExist:
-            pass
-        return None
-
 
 class ProductQuerySet(models.QuerySet):
     def available(self):
@@ -268,12 +258,3 @@ class Order(models.Model):
     def is_address_found(self):
         return self.get_coordinates() is not None
 
-    def get_coordinates(self):
-        from locations.models import Location
-        try:
-            location = Location.objects.get(address=self.address)
-            if location.latitude and location.longitude:
-                return (location.latitude, location.longitude)
-        except Location.DoesNotExist:
-            pass
-        return None

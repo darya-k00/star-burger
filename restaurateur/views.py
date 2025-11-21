@@ -147,7 +147,7 @@ def view_orders(request):
         for menu_item in restaurant.menu_items.all():
             restaurant_products[restaurant.id].add(menu_item.product.id)
 
-    restaurants_dict = {r.id: r for r in all_restaurants}
+    restaurants_dict = {restaurant.id: restaurant for restaurant in all_restaurants}
 
     orders_data = []
     for order in orders:
